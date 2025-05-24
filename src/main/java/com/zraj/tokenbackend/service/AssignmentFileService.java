@@ -1,0 +1,158 @@
+package com.zraj.tokenbackend.service;
+
+import com.zraj.tokenbackend.dto.AssignmentDTO;
+import com.zraj.tokenbackend.entity.*;
+import com.zraj.tokenbackend.repository.AssignmentMaterialRepository;
+import com.zraj.tokenbackend.repository.AssignmentRepository;
+import com.zraj.tokenbackend.repository.AssignmentSubmissionRepository;
+import com.zraj.tokenbackend.repository.StudentRepository;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.List;
+
+
+@Service
+public class AssignmentFileService {
+
+    private final Path rootLocation;
+    private final AssignmentMaterialRepository materialRepo;
+    private final AssignmentSubmissionRepository submissionRepo;
+    private final AssignmentRepository assignmentRepository;
+    private final StudentRepository studentRepository;
+
+    public AssignmentFileService(
+            @Value("${app.upload.dir}") String uploadDir,
+            AssignmentMaterialRepository materialRepo,
+            AssignmentSubmissionRepository submissionRepo,
+            AssignmentRepository assignmentRepository, StudentRepository studentRepository) {
+        this.rootLocation = Paths.get(uploadDir).toAbsolutePath().normalize();
+        this.materialRepo = materialRepo;
+        this.submissionRepo = submissionRepo;
+        this.assignmentRepository = assignmentRepository;
+        this.studentRepository = studentRepository;
+    }
+
+    public List<AssignmentMaterial> listMaterials(Long assignmentId) {
+        return materialRepo.findByAssignmentId(assignmentId);
+    }
+
+    public AssignmentDTO getAssignmentById(Long id) {
+        return assignmentRepository.findById(id)
+                .map(assignment -> new AssignmentDTO(
+                        assignment.getId(),
+                        assignment.getTitle(),
+                        assignment.getDescription(),
+                        assignment.getDueDate()
+                ))
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found with id: " + id));
+    }
+
+    public Resource loadAsResource(String type, String encodedFilename) throws Exception {
+
+        String filename = URLDecoder.decode(encodedFilename, StandardCharsets.UTF_8);
+        Path file = rootLocation.resolve(type).resolve(filename).normalize();
+        if (!Files.probeContentType(file).equals("application/pdf")) {
+            throw new RuntimeException("Invalid file type");
+        }
+        Resource resource = new UrlResource(file.toUri());
+        if (resource.exists() || resource.isReadable()) {
+            return resource;
+        }
+        throw new RuntimeException("Не удалось прочитать файл: " + filename);
+    }
+
+
+    public AssignmentMaterial storeMaterial(Long assignmentId, MultipartFile file) throws Exception {
+        Files.createDirectories(rootLocation.resolve("materials"));
+        String filename = file.getOriginalFilename();
+        assert filename != null;
+        Path dest = rootLocation.resolve("materials").resolve(filename);
+        Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+        AssignmentMaterial m = new AssignmentMaterial();
+        m.setAssignmentId(assignmentId);
+        m.setFileName(filename);
+        m.setFilePath(dest.toString());
+        return materialRepo.save(m);
+    }
+
+    public List<AssignmentSubmission> listAllStudentsSubmissions(Long assignmentId) {
+        return submissionRepo.findByAssignmentId(assignmentId);
+    }
+
+
+    @Transactional
+    public AssignmentSubmission storeSubmission(Long assignmentId, Long studentId, MultipartFile file) throws Exception {
+        // 1. Проверяем и создаем директории
+        Path submissionsDir = rootLocation.resolve("submissions");
+        Files.createDirectories(submissionsDir);
+
+        String filename = file.getOriginalFilename();
+        assert filename != null;
+
+        // 3. Сохраняем файл
+        String relativePath = "submissions" + "/" + file.getOriginalFilename();
+        Path dest = rootLocation.resolve(relativePath).normalize();
+
+        // 4. Проверка безопасности пути
+        if (!dest.startsWith(rootLocation)) {
+            throw new AccessDeniedException("Попытка сохранить файл вне целевой директории");
+        }
+
+        Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+        // 5. Сохраняем метаданные в БД
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new EntityNotFoundException("Student not found"));
+
+        AssignmentSubmission submission = new AssignmentSubmission();
+        submission.setAssignment(assignment);
+        submission.setStudent(student);
+        submission.setFileName(filename);
+        submission.setFilePath(relativePath);
+
+        return submissionRepo.save(submission);
+    }
+
+
+
+    public List<AssignmentSubmission> getStudentSubmissions(
+            Long assignmentId,
+            Long studentId
+    ) {
+        return submissionRepo.findAllByAssignment_IdAndStudent_UserId(assignmentId, studentId);
+    }
+
+    @Transactional
+    public void deleteFile(Long fileId) throws IOException {
+        // Получаем запись из БД
+        AssignmentSubmission submission = submissionRepo.findById(fileId)
+                .orElseThrow(() -> new FileNotFoundException("Файл не найден в БД"));
+
+        // Формируем полный путь: rootLocation + относительный путь из БД
+        Path filePath = rootLocation.resolve(submission.getFilePath()).normalize();
+
+
+
+
+        // Удаляем файл и запись из БД
+        Files.delete(filePath);
+        submissionRepo.delete(submission);
+    }
+
+
+}
+
