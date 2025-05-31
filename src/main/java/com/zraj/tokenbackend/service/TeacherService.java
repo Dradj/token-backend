@@ -3,7 +3,7 @@ package com.zraj.tokenbackend.service;
 import com.zraj.tokenbackend.dto.teacher.GroupAssignmentDTO;
 import com.zraj.tokenbackend.dto.teacher.StudentAssignmentDTO;
 import com.zraj.tokenbackend.dto.teacher.SubmittedAssignmentDTO;
-import com.zraj.tokenbackend.dto.teacher.TeacherAssignmentDTO;
+import com.zraj.tokenbackend.dto.teacher.TeacherCourseDTO;
 import com.zraj.tokenbackend.entity.AssignmentSubmission;
 import com.zraj.tokenbackend.entity.Course;
 import com.zraj.tokenbackend.repository.AssignmentSubmissionRepository;
@@ -27,7 +27,7 @@ public class TeacherService {
         this.submissionRepository = submissionRepository;
     }
 
-    public List<TeacherAssignmentDTO> getTeacherAssignments(Long teacherId) {
+    public List<TeacherCourseDTO> getTeacherAssignments(Long teacherId) {
         // 1. Получаем курсы преподавателя
         List<Course> courses = courseTeacherRepository.findCoursesByTeacherId(teacherId);
 
@@ -43,7 +43,7 @@ public class TeacherService {
                                     getStudentsWithAssignments(course.getId(), group.getId())
                             )).toList();
 
-                    return new TeacherAssignmentDTO(
+                    return new TeacherCourseDTO(
                             course.getId(),
                             course.getName(),
                             groups
@@ -60,7 +60,7 @@ public class TeacherService {
                         Collectors.mapping(
                                 submission -> new SubmittedAssignmentDTO(
                                         submission.getId(),
-                                        submission.getAssignment().getTitle(),
+                                        submission.getAssignment().getId(),
                                         submission.getFilePath(),
                                         submission.getFileName(),
                                         submission.getSubmittedAt()

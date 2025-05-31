@@ -4,7 +4,7 @@ import java.time.Instant;
 
 public record SubmittedAssignmentDTO(
         Long submissionId,
-        String assignmentTitle,
+        Long assignmentId,
         String downloadUrl,
         String fileName,
         Instant submittedAt

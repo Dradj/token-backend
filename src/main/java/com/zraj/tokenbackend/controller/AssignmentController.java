@@ -3,7 +3,7 @@ package com.zraj.tokenbackend.controller;
 import com.zraj.tokenbackend.RFC5987;
 import com.zraj.tokenbackend.dto.AssignmentDTO;
 import com.zraj.tokenbackend.dto.teacher.SubmittedAssignmentDTO;
-import com.zraj.tokenbackend.dto.teacher.TeacherAssignmentDTO;
+import com.zraj.tokenbackend.dto.teacher.TeacherCourseDTO;
 import com.zraj.tokenbackend.entity.AssignmentMaterial;
 import com.zraj.tokenbackend.entity.AssignmentSubmission;
 import com.zraj.tokenbackend.service.AssignmentFileService;
@@ -24,7 +24,6 @@ import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/assignments")
@@ -51,9 +50,24 @@ public class AssignmentController {
     }
 
     @GetMapping("/{id}/materials")
-    public List<AssignmentMaterial> getMaterials(@PathVariable Long id) {
-        return fileService.listMaterials(id);
+    public List<SubmittedAssignmentDTO> getMaterials(@PathVariable Long id) {
+        return fileService.listMaterials(id)
+                .stream()
+                .map(material -> {
+                    String encodedFileName = RFC5987.encode(material.getFileName(), StandardCharsets.UTF_8);
+                    String downloadUrl = "http://localhost:8080/api/assignments/files/materials/" + encodedFileName;
+
+                    return new SubmittedAssignmentDTO(
+                            material.getId(),               // submissionId
+                            material.getAssignment().getId(),  // assignmentTitle
+                            downloadUrl,                       // downloadUrl
+                            material.getFileName(),          // fileName
+                            material.getSubmittedAt()        // submittedAt
+                    );
+                })
+                .toList();
     }
+
 
     /*@GetMapping("/files/{type}/{filename:.+}")
     public ResponseEntity<Resource> serveFile(
@@ -105,7 +119,7 @@ public class AssignmentController {
 
                     return new SubmittedAssignmentDTO(
                             submission.getId(),               // submissionId
-                            submission.getAssignment().getTitle(),  // assignmentTitle
+                            submission.getAssignment().getId(),  // assignmentTitle
                             downloadUrl,                       // downloadUrl
                             submission.getFileName(),          // fileName
                             submission.getSubmittedAt()        // submittedAt
@@ -150,7 +164,7 @@ public class AssignmentController {
 
 
     //ЛОГИКА ДЛЯ ПРЕПОДАВАТЕЛЕЙ
-    @PostMapping("/{id}/materials")
+    @PostMapping("/{id}/materials/upload")
     public AssignmentMaterial uploadMaterial(
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file
@@ -181,10 +195,10 @@ public class AssignmentController {
     }
 
     @GetMapping("/teacher")
-    public ResponseEntity<List<TeacherAssignmentDTO>> getTeacherAssignments(Authentication auth) {
+    public ResponseEntity<List<TeacherCourseDTO>> getTeacherAssignments(Authentication auth) {
         String email = auth.getName();
         Long teacherId = userService.getUserIdByEmail(email);
-        List<TeacherAssignmentDTO> result = teacherService.getTeacherAssignments(teacherId);
+        List<TeacherCourseDTO> result = teacherService.getTeacherAssignments(teacherId);
         return ResponseEntity.ok(result);
     }
 

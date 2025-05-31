@@ -19,6 +19,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.List;
+import java.util.Optional;
 
 
 @Service
@@ -73,17 +74,35 @@ public class AssignmentFileService {
 
 
     public AssignmentMaterial storeMaterial(Long assignmentId, MultipartFile file) throws Exception {
-        Files.createDirectories(rootLocation.resolve("materials"));
+        // 1. Проверяем и создаем директории
+        Path materialsDir = rootLocation.resolve("materials");
+        Files.createDirectories(materialsDir);
+
         String filename = file.getOriginalFilename();
         assert filename != null;
-        Path dest = rootLocation.resolve("materials").resolve(filename);
+
+        // 3. Сохраняем файл
+        String relativePath = "materials" + "/" + file.getOriginalFilename();
+        Path dest = rootLocation.resolve(relativePath).normalize();
+
+        // 4. Проверка безопасности пути
+        if (!dest.startsWith(rootLocation)) {
+            throw new AccessDeniedException("Попытка сохранить файл вне целевой директории");
+        }
+
         Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
 
-        AssignmentMaterial m = new AssignmentMaterial();
-        m.setAssignmentId(assignmentId);
-        m.setFileName(filename);
-        m.setFilePath(dest.toString());
-        return materialRepo.save(m);
+        // 5. Сохраняем метаданные в БД
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new EntityNotFoundException("Assignment not found"));
+
+
+        AssignmentMaterial material = new AssignmentMaterial();
+        material.setAssignment(assignment);
+        material.setFileName(filename);
+        material.setFilePath(relativePath);
+
+        return materialRepo.save(material);
     }
 
     public List<AssignmentSubmission> listAllStudentsSubmissions(Long assignmentId) {
@@ -138,19 +157,28 @@ public class AssignmentFileService {
 
     @Transactional
     public void deleteFile(Long fileId) throws IOException {
-        // Получаем запись из БД
-        AssignmentSubmission submission = submissionRepo.findById(fileId)
-                .orElseThrow(() -> new FileNotFoundException("Файл не найден в БД"));
+        // Проверяем, существует ли файл в MaterialRepository
+        Optional<AssignmentMaterial> materialOpt = materialRepo.findById(fileId);
+        if (materialOpt.isPresent()) {
+            AssignmentMaterial material = materialOpt.get();
+            Path filePath = rootLocation.resolve(material.getFilePath()).normalize();
+            Files.delete(filePath);
+            materialRepo.delete(material);
+            return;
+        }
 
-        // Формируем полный путь: rootLocation + относительный путь из БД
-        Path filePath = rootLocation.resolve(submission.getFilePath()).normalize();
+        // Если не найден в Material, проверяем AssignmentSubmissionRepository
+        Optional<AssignmentSubmission> submissionOpt = submissionRepo.findById(fileId);
+        if (submissionOpt.isPresent()) {
+            AssignmentSubmission submission = submissionOpt.get();
+            Path filePath = rootLocation.resolve(submission.getFilePath()).normalize();
+            Files.delete(filePath);
+            submissionRepo.delete(submission);
+            return;
+        }
 
-
-
-
-        // Удаляем файл и запись из БД
-        Files.delete(filePath);
-        submissionRepo.delete(submission);
+        // Если файл не найден ни в одном репозитории
+        throw new FileNotFoundException("Файл с ID " + fileId + " не найден");
     }
 
 

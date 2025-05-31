@@ -11,8 +11,9 @@ public class AssignmentMaterial {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "assignment_id", nullable = false)
-    private Long assignmentId;
+    @ManyToOne
+    @JoinColumn(name = "assignment_id", nullable = false)
+    private Assignment assignment;
 
     @Column(name = "file_name", nullable = false)
     private String fileName;
@@ -21,16 +22,16 @@ public class AssignmentMaterial {
     private String filePath;
 
     @Column(name = "uploaded_at", nullable = false)
-    private Instant uploadedAt = Instant.now();
+    private Instant submittedAt = Instant.now();
 
     public Long getId() {return id;}
     public void setId(Long id) {this.id = id;}
-    public Long getAssignmentId() {return assignmentId;}
-    public void setAssignmentId(Long assignmentId) {this.assignmentId = assignmentId;}
+    public Assignment getAssignment() {return assignment;}
+    public void setAssignment(Assignment assignment) {this.assignment = assignment;}
     public String getFileName() {return fileName;}
     public void setFileName(String fileName) {this.fileName = fileName;}
     public String getFilePath() {return filePath;}
     public void setFilePath(String filePath) {this.filePath = filePath;}
-    public Instant getUploadedAt() {return uploadedAt;}
-    public void setUploadedAt(Instant uploadedAt) {this.uploadedAt = uploadedAt;}
+    public Instant getSubmittedAt() {return submittedAt;}
+    public void setSubmittedAt(Instant submittedAt) {this.submittedAt = submittedAt;}
 }
