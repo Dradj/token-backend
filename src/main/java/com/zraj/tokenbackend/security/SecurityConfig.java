@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/debug/**").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/wallet/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/assignments/files/**").permitAll()
                         .anyRequest().authenticated() // Все остальные запросы требуют аутентификации
                 )
