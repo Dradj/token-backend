@@ -1,5 +1,6 @@
 package com.zraj.tokenbackend.dto.teacher;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 public record SubmittedAssignmentDTO(
@@ -7,5 +8,7 @@ public record SubmittedAssignmentDTO(
         Long assignmentId,
         String downloadUrl,
         String fileName,
-        Instant submittedAt
+        Instant submittedAt,
+        BigDecimal gradeValue,
+        Boolean rewarded
 ) {}

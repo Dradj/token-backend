@@ -20,17 +20,23 @@ public class AssignmentGrade {
     @Column(nullable = false, precision = 3, scale = 1, columnDefinition = "DECIMAL(3,1)")
     private BigDecimal grade;
 
+    @Column(nullable = false)
+    private boolean rewarded = false;
+
     // Конструкторы
     public AssignmentGrade() {}
 
     public AssignmentGrade(AssignmentGradeId id, BigDecimal grade) {
         this.id = id;
         this.grade = grade;
+        rewarded = false;
     }
 
     public AssignmentGradeId getId() { return id; }
     public void setId(AssignmentGradeId id) { this.id = id; }
     public BigDecimal getGrade() { return grade; }
     public void setGrade(BigDecimal grade) { this.grade = grade; }
+    public boolean isRewarded() { return rewarded; }
+    public void setRewarded(boolean rewarded) { this.rewarded = rewarded; }
 }
 

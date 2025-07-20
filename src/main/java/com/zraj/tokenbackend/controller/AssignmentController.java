@@ -4,10 +4,12 @@ import com.zraj.tokenbackend.RFC5987;
 import com.zraj.tokenbackend.dto.AssignmentDTO;
 import com.zraj.tokenbackend.dto.teacher.SubmittedAssignmentDTO;
 import com.zraj.tokenbackend.dto.teacher.TeacherCourseDTO;
+import com.zraj.tokenbackend.entity.AssignmentGrade;
+import com.zraj.tokenbackend.entity.AssignmentGradeId;
 import com.zraj.tokenbackend.entity.AssignmentMaterial;
 import com.zraj.tokenbackend.entity.AssignmentSubmission;
+import com.zraj.tokenbackend.repository.AssignmentGradeRepository;
 import com.zraj.tokenbackend.service.AssignmentFileService;
-import com.zraj.tokenbackend.service.GradeService;
 import com.zraj.tokenbackend.service.TeacherService;
 import com.zraj.tokenbackend.service.UserService;
 import org.springframework.core.io.Resource;
@@ -24,23 +26,24 @@ import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/assignments")
 public class AssignmentController {
 
     private final AssignmentFileService fileService;
-    private final GradeService gradeService;
     private final UserService userService;
     private final AssignmentFileService assignmentFileService;
     private final TeacherService teacherService;
+    private final AssignmentGradeRepository assignmentGradeRepository;
 
-    public AssignmentController(AssignmentFileService fileService, GradeService gradeService, UserService userService, AssignmentFileService assignmentFileService, TeacherService teacherService) {
+    public AssignmentController(AssignmentFileService fileService, UserService userService, AssignmentFileService assignmentFileService, TeacherService teacherService, AssignmentGradeRepository assignmentGradeRepository) {
         this.fileService = fileService;
-        this.gradeService = gradeService;
         this.userService = userService;
         this.assignmentFileService = assignmentFileService;
         this.teacherService = teacherService;
+        this.assignmentGradeRepository = assignmentGradeRepository;
     }
 
     @GetMapping("/{id}")
@@ -62,26 +65,14 @@ public class AssignmentController {
                             material.getAssignment().getId(),  // assignmentTitle
                             downloadUrl,                       // downloadUrl
                             material.getFileName(),          // fileName
-                            material.getSubmittedAt()        // submittedAt
+                            material.getSubmittedAt(),        // submittedAt
+                            null,
+                            null
                     );
                 })
                 .toList();
     }
 
-
-    /*@GetMapping("/files/{type}/{filename:.+}")
-    public ResponseEntity<Resource> serveFile(
-            @PathVariable String type,
-            @PathVariable String filename
-    ) throws Exception {
-        Resource file = fileService.loadAsResource(type, filename);
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getFilename() + "\"")
-                .body(file);
-    }
-    */
     @GetMapping("/files/{type}/{filename:.+}")
     public ResponseEntity<Resource> serveFile(
             @PathVariable String type,
@@ -106,6 +97,11 @@ public class AssignmentController {
 
 
     // ЛОГИКА ДЛЯ СТУДЕНТОВ
+    @GetMapping("/{studentId}/submissions-with-grades")
+    public List<SubmittedAssignmentDTO> getStudentSubmissionsWithGrades(@PathVariable Long studentId) {
+        return assignmentFileService.getSubmittedAssignmentsWithGrades(studentId);
+    }
+
     @GetMapping("/{assignmentId}/submissions")
     public List<SubmittedAssignmentDTO> getSubmissions(
             @PathVariable Long assignmentId,
@@ -117,12 +113,20 @@ public class AssignmentController {
                     String encodedFileName = RFC5987.encode(submission.getFileName(), StandardCharsets.UTF_8);
                     String downloadUrl = "http://localhost:8080/api/assignments/files/submissions/" + encodedFileName;
 
+                    AssignmentGradeId gradeId = new AssignmentGradeId(studentId, assignmentId);
+                    Optional<AssignmentGrade> gradeOpt = assignmentGradeRepository.findById(gradeId);
+
+                    BigDecimal gradeValue = gradeOpt.map(AssignmentGrade::getGrade).orElse(null);
+                    boolean rewarded = gradeOpt.map(AssignmentGrade::isRewarded).orElse(false);
+
                     return new SubmittedAssignmentDTO(
-                            submission.getId(),               // submissionId
-                            submission.getAssignment().getId(),  // assignmentTitle
-                            downloadUrl,                       // downloadUrl
-                            submission.getFileName(),          // fileName
-                            submission.getSubmittedAt()        // submittedAt
+                            submission.getId(),
+                            submission.getAssignment().getId(),
+                            downloadUrl,
+                            submission.getFileName(),
+                            submission.getSubmittedAt(),
+                            gradeValue,
+                            rewarded
                     );
                 })
                 .toList();
@@ -174,25 +178,13 @@ public class AssignmentController {
         return fileService.storeMaterial(id, file);
     }
 
-    @GetMapping("/{id}/submissions/forteacher")
-    public List<AssignmentSubmission> getAllStudentsSubmissions(
-            @PathVariable Long id
+    //@GetMapping("/{id}/submissions/forteacher")
+    //public List<AssignmentSubmission> getAllStudentsSubmissions(
+    //        @PathVariable Long id
 
-    ) {
-        return fileService.listAllStudentsSubmissions(id);
-    }
-
-    @PostMapping("/{id}/grade")
-    public ResponseEntity<?> gradeSubmission(
-            @PathVariable Long id,
-            @RequestParam Long studentId,
-            @RequestParam BigDecimal grade,
-            Authentication auth
-    ) {
-        // Проверить роль преподавателя
-        gradeService.saveOrUpdateGrade(id, studentId, grade);
-        return ResponseEntity.ok().build();
-    }
+    //) {
+    //    return fileService.listAllStudentsSubmissions(id);
+    //}
 
     @GetMapping("/teacher")
     public ResponseEntity<List<TeacherCourseDTO>> getTeacherAssignments(Authentication auth) {

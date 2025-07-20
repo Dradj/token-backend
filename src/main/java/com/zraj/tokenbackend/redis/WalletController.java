@@ -1,13 +1,12 @@
 package com.zraj.tokenbackend.redis;
 
-import com.zraj.tokenbackend.entity.User;
-import jakarta.validation.constraints.Pattern;
+import com.zraj.tokenbackend.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -20,21 +19,25 @@ public class WalletController {
 
     private final RedisCodeService redisCodeService;
     private final JavaMailSender mailSender;
+    private final UserService userService;
+    private final WalletService walletService;
 
     @Value("${app.verification.code-length}")
     private int codeLength;
 
-    public WalletController(RedisCodeService redisCodeService, JavaMailSender mailSender) {
+    public WalletController(RedisCodeService redisCodeService, JavaMailSender mailSender, UserService userService, WalletService walletService) {
         this.redisCodeService = redisCodeService;
         this.mailSender = mailSender;
+        this.userService = userService;
+        this.walletService = walletService;
     }
 
     @PostMapping("/initiate-change")
     public void initiateChange(
-            @RequestBody WalletChangeInitRequestDTO request,
+            @RequestBody WalletAddressDTO request,
             Authentication authentication
     ) {
-        String newWallet = request.newWallet();
+        String newWallet = request.walletAddress();
         String code = generateVerificationCode();
 
         // Сохраняем в Redis
@@ -68,9 +71,6 @@ public class WalletController {
             );
         }
 
-        // Здесь должна быть логика обновления кошелька в БД
-        // userService.updateWallet(user.getId(), request.getNewWallet());
-
         // Очищаем Redis
         redisCodeService.deleteRequest(authentication.getName());
     }
@@ -91,5 +91,35 @@ public class WalletController {
         );
         mailSender.send(message);
     }
+
+
+
+    @PostMapping("/set")
+    public ResponseEntity<?> setWalletAddress(@RequestBody WalletAddressDTO request, Authentication authentication) {
+
+        String email = authentication.getName();
+        Long id = userService.getUserIdByEmail(email);
+        walletService.setStudentWallet(id, request.walletAddress());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/remove")
+    public ResponseEntity<?> removeWalletAddress(Authentication authentication) {
+        String email = authentication.getName();
+        Long id = userService.getUserIdByEmail(email);
+
+        walletService.removeStudentWallet(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/get")
+    public ResponseEntity<WalletAddressDTO> getWalletAddress(Authentication authentication) {
+        String email = authentication.getName();
+        Long id = userService.getUserIdByEmail(email);
+
+        String walletAddress = walletService.getStudentWallet(id);
+        return ResponseEntity.ok(new WalletAddressDTO(walletAddress));
+    }
 }
+
 

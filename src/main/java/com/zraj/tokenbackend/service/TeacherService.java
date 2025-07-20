@@ -63,7 +63,9 @@ public class TeacherService {
                                         submission.getAssignment().getId(),
                                         submission.getFilePath(),
                                         submission.getFileName(),
-                                        submission.getSubmittedAt()
+                                        submission.getSubmittedAt(),
+                                        null,
+                                        null
                                 ),
                                 Collectors.toList()
                         )

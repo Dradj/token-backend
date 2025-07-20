@@ -16,6 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -50,6 +51,7 @@ public class SecurityConfig {
 
                 // Настройка доступа к эндпоинтам
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/img/**", "/css/**", "/js/**", "/").permitAll()
                         .requestMatchers("/api/assignments/files/**").permitAll()
                         .requestMatchers("/api/auth/login").permitAll() // Разрешить всем
                         .requestMatchers("/api/student/**").hasRole("STUDENT") // Только студенты
@@ -80,6 +82,7 @@ public class SecurityConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
+        config.addExposedHeader("Content-Type");
 
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -97,5 +100,13 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
+    }
+    @Configuration
+    public static class AppConfig {
+
+        @Bean
+        public RestTemplate restTemplate() {
+            return new RestTemplate();
+        }
     }
 }

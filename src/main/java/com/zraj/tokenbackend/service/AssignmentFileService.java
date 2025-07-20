@@ -1,11 +1,10 @@
 package com.zraj.tokenbackend.service;
 
+import com.zraj.tokenbackend.RFC5987;
 import com.zraj.tokenbackend.dto.AssignmentDTO;
+import com.zraj.tokenbackend.dto.teacher.SubmittedAssignmentDTO;
 import com.zraj.tokenbackend.entity.*;
-import com.zraj.tokenbackend.repository.AssignmentMaterialRepository;
-import com.zraj.tokenbackend.repository.AssignmentRepository;
-import com.zraj.tokenbackend.repository.AssignmentSubmissionRepository;
-import com.zraj.tokenbackend.repository.StudentRepository;
+import com.zraj.tokenbackend.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -30,17 +30,21 @@ public class AssignmentFileService {
     private final AssignmentSubmissionRepository submissionRepo;
     private final AssignmentRepository assignmentRepository;
     private final StudentRepository studentRepository;
+    private final AssignmentGradeRepository gradeRepo;
+    private final AssignmentSubmissionRepository assignmentSubmissionRepository;
 
     public AssignmentFileService(
             @Value("${app.upload.dir}") String uploadDir,
             AssignmentMaterialRepository materialRepo,
             AssignmentSubmissionRepository submissionRepo,
-            AssignmentRepository assignmentRepository, StudentRepository studentRepository) {
+            AssignmentRepository assignmentRepository, StudentRepository studentRepository, AssignmentGradeRepository gradeRepo, AssignmentSubmissionRepository assignmentSubmissionRepository) {
         this.rootLocation = Paths.get(uploadDir).toAbsolutePath().normalize();
         this.materialRepo = materialRepo;
         this.submissionRepo = submissionRepo;
         this.assignmentRepository = assignmentRepository;
         this.studentRepository = studentRepository;
+        this.gradeRepo = gradeRepo;
+        this.assignmentSubmissionRepository = assignmentSubmissionRepository;
     }
 
     public List<AssignmentMaterial> listMaterials(Long assignmentId) {
@@ -105,9 +109,9 @@ public class AssignmentFileService {
         return materialRepo.save(material);
     }
 
-    public List<AssignmentSubmission> listAllStudentsSubmissions(Long assignmentId) {
-        return submissionRepo.findByAssignmentId(assignmentId);
-    }
+    //public List<AssignmentSubmission> listAllStudentsSubmissions(Long assignmentId) {
+    //    return submissionRepo.findByAssignmentId(assignmentId);
+    //}
 
 
     @Transactional
@@ -146,7 +150,32 @@ public class AssignmentFileService {
         return submissionRepo.save(submission);
     }
 
+    public List<SubmittedAssignmentDTO> getSubmittedAssignmentsWithGrades(Long studentId) {
+        return assignmentSubmissionRepository.findAllByStudentUserId(studentId).stream()
+                .map(submission -> {
+                    Long assignmentId = submission.getAssignment().getId();
+                    AssignmentGradeId gradeId = new AssignmentGradeId(studentId, assignmentId);
 
+                    Optional<AssignmentGrade> gradeOpt = gradeRepo.findById(gradeId);
+
+                    BigDecimal gradeValue = gradeOpt.map(AssignmentGrade::getGrade).orElse(null);
+                    Boolean rewarded = gradeOpt.map(AssignmentGrade::isRewarded).orElse(false);
+
+                    String encodedFileName = RFC5987.encode(submission.getFileName(), StandardCharsets.UTF_8);
+                    String downloadUrl = "http://localhost:8080/api/assignments/files/submissions/" + encodedFileName;
+
+                    return new SubmittedAssignmentDTO(
+                            submission.getId(),
+                            assignmentId,
+                            downloadUrl,
+                            submission.getFileName(),
+                            submission.getSubmittedAt(),
+                            gradeValue,
+                            rewarded
+                    );
+                })
+                .toList();
+    }
 
     public List<AssignmentSubmission> getStudentSubmissions(
             Long assignmentId,
